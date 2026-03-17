@@ -10,7 +10,7 @@
 #include <system_error>
 
 namespace fs = std::filesystem;
-const static int CHUNK_SZ = 1'000'000;
+const static int CHUNK_SZ = 100'000;
 const static int MAX_CONCURRENT = 5;
 
 FileService::FileService(Node& node) : node_{node} {}

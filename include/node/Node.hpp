@@ -37,10 +37,13 @@ public:
 
 private:
     awaitable<std::optional<RpcMessage>>
-    call_rpc(Contact target, const RpcMessage& msg);
+    call_rpc(Contact target, RpcMessage msg);
 
     awaitable<std::vector<Contact>> node_lookup(const ID&);
-    awaitable<std::optional<Value>> value_lookup(const ID&);
+    awaitable<std::optional<Value>> value_lookup(const Key&);
+
+    awaitable<std::vector<Contact>> async_node_lookup(const ID&);
+    awaitable<std::optional<Value>> async_value_lookup(const Key&);
 
     awaitable<void> handle_request(Request);
     awaitable<void> handle_ping(Request);

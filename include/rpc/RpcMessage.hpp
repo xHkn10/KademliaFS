@@ -34,9 +34,9 @@ struct RpcMessage {
     std::vector<u8> serialize() const;
     static std::optional<RpcMessage> deserialize(const std::vector<u8>&);
     
-    std::vector<Contact> get_contacts() const;
-    std::pair<ID, std::vector<u8>> get_key_value() const;
-    ID get_id() const;
+    std::vector<Contact>& get_contacts();
+    std::pair<ID, std::vector<u8>>& get_key_value();
+    ID& get_id();
 
     static RpcMessage make_find_node_rpc(const ID& senderID, const ID&, u16);
     static RpcMessage make_store_rpc(const ID& senderID, Key, Value, u16);

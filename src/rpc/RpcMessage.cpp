@@ -126,18 +126,18 @@ RpcMessage::deserialize(const std::vector<u8>& packet) {
     return res;
 }
 
-std::vector<Contact>
-RpcMessage::get_contacts() const {
+std::vector<Contact>&
+RpcMessage::get_contacts() {
     return std::get<std::vector<Contact>>(data);
 }
 
-std::pair<Key, Value>
-RpcMessage::get_key_value() const {
+std::pair<Key, Value>&
+RpcMessage::get_key_value() {
     return std::get<std::pair<Key, Value>>(data);
 }
 
-ID
-RpcMessage::get_id() const {
+ID&
+RpcMessage::get_id() {
     return std::get<ID>(data);
 }
 

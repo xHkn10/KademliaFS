@@ -53,15 +53,16 @@ bool files_equal(const std::string& a, const std::string& b) {
 
 int main(void) {
     auto io = boost::asio::io_context{};
-    std::deque<Node> nodes;
-    const int n = 50;
+    const int n = 250;
+    std::vector<Node> nodes;
+    nodes.reserve(n);
 
     for (int i = 0; i < n; ++i) {
         const u16 port = 3169 + i;
-        const Contact c{ID::get_random_ID(), 0x7F000001, port};
+        Contact c{ID::get_random_ID(), 0x7F000001, port};
         
         auto transport = std::make_unique<TCPTransport>(c, io.get_executor());
-        nodes.emplace_back(c, std::move(transport), "./DB/db_"+std::to_string(i));
+        nodes.emplace_back(std::move(c), std::move(transport), "./DB/db_"+std::to_string(i));
         net::co_spawn(io, nodes.back().listen(), net::detached);
     }
 
@@ -87,28 +88,35 @@ int main(void) {
     std::string file = "testfiles/testfile10MB.bin";
     std::string target_loc = "downloads/downloaded.bin";
     auto test_fs = [&]() -> awaitable<void> {
-        std::cout << "BOOTSTRAPPING..." << std::endl;
-        for (int i = 1; i < n; ++i)
-            co_await nodes[i].bootstrap({nodes.front().self_});
-        std::cout << "BOOTSTRAPPING DONE" << std::endl;
-        
-        auto s = std::chrono::high_resolution_clock::now();
-        FileService fs{nodes[3]};
-        auto md = co_await fs.upload_file(file);
-
-        std::cout << "Uploaded" << std::endl;
-
-        co_await fs.download_file(md, target_loc);
-
-        std::cout << "Downloaded" << std::endl;
-        auto e = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(e - s).count();
-        std::cout << "Took " << duration << " seconds" << std::endl;
-
-        if (!files_equal(file, target_loc))
-            std::cout << "Files are not the same" << std::endl;
-        else
-            std::cout << "Files are fine" << std::endl;
+        {
+            auto s = std::chrono::high_resolution_clock::now();
+            std::cout << "BOOTSTRAPPING..." << std::endl;
+            for (int i = 1; i < n; ++i)
+                co_await nodes[i].bootstrap({nodes.front().self_});
+            std::cout << "BOOTSTRAPPING DONE" << std::endl;
+            auto e = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(e - s).count();
+            std::cout << "Boot took " << duration << " seconds" << std::endl;
+        }
+        {
+            auto s = std::chrono::high_resolution_clock::now();
+            FileService fs{nodes[3]};
+            auto md = co_await fs.upload_file(file);
+    
+            std::cout << "Uploaded" << std::endl;
+    
+            co_await fs.download_file(md, target_loc);
+    
+            std::cout << "Downloaded" << std::endl;
+            auto e = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(e - s).count();
+            std::cout << "Took " << duration << " seconds" << std::endl;
+    
+            if (!files_equal(file, target_loc))
+                std::cout << "Files are not the same" << std::endl;
+            else
+                std::cout << "Files are fine" << std::endl;
+        }
 
         // print_heat_map(); 
     };

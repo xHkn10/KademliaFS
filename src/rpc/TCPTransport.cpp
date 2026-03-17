@@ -5,11 +5,7 @@
 #include <optional>
 
 TCPTransport::TCPTransport(Contact self, net::any_io_executor ex)
-    : TransportEngine{self}, acceptor_{ex}, channel_{ex, 64} {
-    acceptor_.open(tcp::v4());
-    acceptor_.set_option(net::socket_base::reuse_address(true));
-    acceptor_.bind(tcp::endpoint(tcp::v4(), self.port));
-    acceptor_.listen();
+    : TransportEngine{self}, acceptor_{ex, {tcp::v4(), self.port}}, channel_{ex, 64} {
     net::co_spawn(ex, accept_loop(), net::detached);
 }
 

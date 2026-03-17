@@ -1,21 +1,22 @@
 #include "rpc/RpcMessage.hpp"
 #include "rpc/TransportEngine.hpp"
+#include "types/Contact.hpp"
 #include "util/util.hpp"
 #include "node/Node.hpp"
+
+#include <boost/asio/experimental/channel.hpp>
 
 #include <memory>
 #include <optional>
 #include <set>
 
-// bla bla
-
 Node::Node(Contact self, std::unique_ptr<TransportEngine> transport, std::string db_path)
     : transport_{std::move(transport)}, self_{self}, table_{self.id}, storage_{db_path} {}
 
 awaitable<std::optional<RpcMessage>>
-Node::call_rpc(Contact target, const RpcMessage& msg) {
+Node::call_rpc(Contact target, RpcMessage msg) {
     co_return co_await transport_->call_rpc(
-        std::move(target), msg
+        std::move(target), std::move(msg)
     );
 }
 
@@ -26,7 +27,8 @@ Node::bootstrap(const std::vector<Contact>& boot_addrs) {
         co_await ping(c);
     }
 
-    co_await node_lookup(self_.id);
+    // co_await node_lookup(self_.id);
+    co_await async_node_lookup(self_.id);
 }
 
 // TODO make parallel
@@ -50,12 +52,14 @@ Node::node_lookup(const ID& target) {
             queried.insert(c.id);
             queried_any = true;
 
-            auto msg = RpcMessage::make_find_node_rpc(
-                self_.id, target, self_.port
+            auto res = co_await call_rpc(
+                c, RpcMessage::make_find_node_rpc(
+                    self_.id, target, self_.port
+                )
             );
-            auto res = co_await call_rpc(c, msg);
             if (!res)
                 continue;
+
             auto contacts = res->get_contacts();
             cands.insert(cands.end(), contacts.begin(), contacts.end());
         }
@@ -67,9 +71,9 @@ Node::node_lookup(const ID& target) {
         for (const Contact& c : shortlist)
             seen.insert(c.id);
 
-        for (const Contact& c : cands)
+        for (Contact c : cands)
             if (!seen.contains(c.id) && c.id != self_.id)
-                shortlist.push_back(c);
+                shortlist.push_back(std::move(c));
 
         std::sort(shortlist.begin(), shortlist.end(),
         [&target](const auto& c1, const auto& c2) {
@@ -86,6 +90,78 @@ Node::node_lookup(const ID& target) {
     co_return shortlist;
 }
 
+awaitable<std::vector<Contact>>
+Node::async_node_lookup(const ID& target) {
+    using channel = net::experimental::channel<void(boost::system::error_code, std::pair<ID, std::optional<RpcMessage>>)>;
+
+    auto ex = co_await net::this_coro::executor;
+    const int k = 20, alpha = 3;
+
+    std::set<ID> queried, in_flight;
+    std::vector<Contact> shortlist = table_.get_closest(target);
+
+    channel results_channel{ex, alpha * 2};
+
+    auto spawn_query = [&target, &ex, this, &results_channel](Contact c) {
+        net::co_spawn(ex, [c = std::move(c), &target, this, &results_channel] ->awaitable<void> {
+            auto res = co_await call_rpc(
+                c, RpcMessage::make_find_node_rpc(
+                    self_.id, target, self_.port
+                )
+            );
+            co_await results_channel.async_send(
+                {}, {std::move(c.id), std::move(res)}
+            );
+        }, net::detached);
+    };
+
+    while (true) {
+        bool spawned_any = false;
+
+        for (int i = 0; i < shortlist.size() && in_flight.size() < alpha; ++i) {
+            Contact c = shortlist[i];
+            if (queried.contains(c.id) || in_flight.contains(c.id))
+                continue;
+            spawned_any = true;
+            queried.insert(c.id);
+            in_flight.insert(c.id);
+            spawn_query(std::move(c));
+        }
+
+        if (!spawned_any && in_flight.empty())
+            break;
+
+        auto [peer, response] = co_await results_channel.async_receive(use_awaitable);
+        in_flight.erase(peer);
+        if (!response)
+            continue;
+
+        {
+            std::set<ID> seen;
+            for (const Contact& c : shortlist)
+                seen.insert(c.id);
+            auto contacts = response->get_contacts();
+            for (Contact& c : contacts)
+                if (c.id != self_.id && !seen.contains(c.id))
+                    shortlist.push_back(std::move(c));
+        }
+
+        std::sort(shortlist.begin(), shortlist.end(),
+        [&target](const auto& c1, const auto& c2) {
+            return (c1.id ^ target) < (c2.id ^ target);
+        });
+        
+        if (shortlist.size() > 2 * k)
+            shortlist.resize(2 * k);
+    }
+
+    if (shortlist.size() > k)
+        shortlist.resize(k);
+
+    co_return shortlist;
+}
+
+
 awaitable<std::optional<Value>>
 Node::value_lookup(const Key& key) {
     const int k = 20;
@@ -96,6 +172,7 @@ Node::value_lookup(const Key& key) {
     while (true) {
         bool queried_any = false;
         std::vector<Contact> cands;
+
         for (int i = 0; i < k && i < shortlist.size(); ++i) {
             const Contact& c = shortlist[i];
             if (queried.contains(c.id))
@@ -127,12 +204,12 @@ Node::value_lookup(const Key& key) {
             break;
 
         std::set<ID> seen;
-        for (Contact& c : shortlist)
+        for (const Contact& c : shortlist)
             seen.insert(c.id);
 
         for (Contact& c : cands)
             if (!seen.contains(c.id) && c.id != self_.id)
-                shortlist.push_back(c);
+                shortlist.push_back(std::move(c));
 
         std::sort(shortlist.begin(), shortlist.end(),
         [&key](const auto& c1, const auto& c2){
@@ -146,9 +223,82 @@ Node::value_lookup(const Key& key) {
     co_return std::nullopt;
 }
 
+awaitable<std::optional<Value>>
+Node::async_value_lookup(const Key& key) {
+    using channel = net::experimental::channel<void(boost::system::error_code, std::pair<ID, std::optional<RpcMessage>>)>;
+    auto ex = co_await net::this_coro::executor;
+    const int k = 20, alpha = 3;
+
+    std::vector<Contact> shortlist = table_.get_closest(key);
+    std::set<ID> queried, in_flight;
+
+    auto results_channel = std::make_shared<channel>(ex, alpha * 2);
+
+    auto spawn_query = [&ex, this, weak_channel = std::weak_ptr<channel>{results_channel}](Contact c, Key k) {
+        net::co_spawn(ex, [c = std::move(c), k = std::move(k), this, weak_channel] -> awaitable<void> {
+            auto res = co_await call_rpc(
+                c, RpcMessage::make_find_value_rpc(
+                    self_.id, k, self_.port
+                )
+            );
+            if (auto chan = weak_channel.lock())
+                co_await chan->async_send(
+                    {}, {std::move(c.id), std::move(res)}
+                );
+        }, net::detached);
+    };
+
+    while (true) {
+        bool spawned_any = false;
+        for (int i = 0; i < shortlist.size() && in_flight.size() < alpha; ++i) {
+            Contact c = shortlist[i];
+            if (queried.contains(c.id) || in_flight.contains(c.id))
+                continue;
+            queried.insert(c.id);
+            in_flight.insert(c.id);
+            spawned_any = true;
+            spawn_query(std::move(c), key);
+        }
+
+        if (!spawned_any && in_flight.empty())
+            break;
+
+        auto [peer, response] = co_await results_channel->async_receive(use_awaitable);
+        in_flight.erase(peer);
+
+        if (!response)
+            continue;
+        if (response->type == RpcType::FIND_VALUE && response->data.index() == 2)
+            co_return
+                std::get<std::pair<Key, Value>>(response->data).second;
+
+        if (response->type == RpcType::FIND_NODE && response->data.index() == 3) {
+            std::set<ID> seen;
+            for (const Contact& c : shortlist)
+                seen.insert(c.id);
+
+            auto cands = response->get_contacts();
+            for (Contact& c : cands)
+                if (!seen.contains(c.id) && c.id != self_.id)
+                    shortlist.push_back(std::move(c));
+
+            std::sort(shortlist.begin(), shortlist.end(),
+            [&key](const auto& c1, const auto& c2) {
+                return (c1.id ^ key) < (c2.id ^ key);
+            });
+            
+            if (shortlist.size() > 2 * k)
+                shortlist.resize(2 * k);
+        }
+    }
+
+    co_return std::nullopt;
+}
+
 awaitable<std::vector<Contact>>
 Node::find_node(const ID& id) {
-    co_return co_await node_lookup(id);
+    // co_return co_await node_lookup(id);
+    co_return co_await async_node_lookup(id);
 }
 
 awaitable<void>
@@ -157,7 +307,8 @@ Node::store(Value value) {
     Key key = util::hash(value);
     const size_t k = 20;
 
-    std::vector<Contact> best_k = co_await node_lookup(key);
+    // std::vector<Contact> best_k = co_await node_lookup(key);
+    std::vector<Contact> best_k = co_await async_node_lookup(key);
     best_k.push_back(self_); 
     std::sort(
         best_k.begin(), best_k.end(),
@@ -189,7 +340,9 @@ Node::store(Key key, Value value) {
     auto ex = co_await net::this_coro::executor;
     const size_t k = 20;
     
-    std::vector<Contact> best_k = co_await node_lookup(key);
+    // std::vector<Contact> best_k = co_await node_lookup(key);
+    std::vector<Contact> best_k = co_await async_node_lookup(key);
+
     best_k.push_back(self_);
     std::sort(
         best_k.begin(), best_k.end(),
@@ -228,9 +381,8 @@ Node::find_value(const ID& key) {
     auto val = storage_.retrieve(key);
     if (val)
         co_return *val;
-    val = co_await value_lookup(key);
-    co_return val;
-    co_return co_await value_lookup(key);
+    // co_return co_await value_lookup(key);
+    co_return co_await async_value_lookup(key);
 }
 
 awaitable<void>
