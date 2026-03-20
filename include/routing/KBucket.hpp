@@ -6,5 +6,5 @@
 class KBucket {
 public:
     std::deque<Contact> bucket_;
-    void push(const Contact& contact);
+    void push(const Contact&);
 };

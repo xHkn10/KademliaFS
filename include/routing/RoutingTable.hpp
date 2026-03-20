@@ -13,8 +13,9 @@ private:
     ID self_;
 
 public:
-    RoutingTable(const ID& id);
-    void insert(const Contact& contact);
-    std::vector<Contact> get_closest(const ID& target);
-    size_t get_bucket_idx(const ID& id);
+    RoutingTable(const ID&);
+    void insert(const Contact&);
+    void remove(const Contact&);
+    std::vector<Contact> get_closest(const ID&);
+    size_t get_bucket_idx(const ID&);
 };

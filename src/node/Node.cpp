@@ -15,9 +15,12 @@ Node::Node(Contact self, std::unique_ptr<TransportEngine> transport, std::string
 
 awaitable<std::optional<RpcMessage>>
 Node::call_rpc(Contact target, RpcMessage msg) {
-    co_return co_await transport_->call_rpc(
+    auto res = co_await transport_->call_rpc(
         std::move(target), std::move(msg)
     );
+    if (!res)
+        table_.remove(target);
+    co_return res;
 }
 
 awaitable<void>
@@ -31,7 +34,7 @@ Node::bootstrap(const std::vector<Contact>& boot_addrs) {
     co_await async_node_lookup(self_.id);
 }
 
-// TODO make parallel
+
 awaitable<std::vector<Contact>>
 Node::node_lookup(const ID& target) {
     const int k = 20;

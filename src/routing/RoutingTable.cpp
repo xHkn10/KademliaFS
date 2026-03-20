@@ -1,5 +1,4 @@
 #include "routing/RoutingTable.hpp"
-#include "types/Contact.hpp"
 #include <algorithm>
 #include <vector>
 
@@ -7,8 +6,7 @@ RoutingTable::RoutingTable(const ID& id) {
     self_ = id;
 }
 
-size_t
-RoutingTable::get_bucket_idx(const ID& id) {
+size_t RoutingTable::get_bucket_idx(const ID& id) {
     const size_t sz = id.bytes_.size();
 
     for (size_t i = 0; i < sz; ++i) {
@@ -60,11 +58,19 @@ RoutingTable::get_closest(const ID& target) {
     return res;
 }
 
+void RoutingTable::insert(const Contact& c) {
+    if (c.id != self_) {
+        ID id = self_ ^ c.id;
+        table_[get_bucket_idx(id)].push(c);
+    }
+}
 
-void
-RoutingTable::insert(const Contact& contact) {
-    if (contact.id != self_) {
-        ID id = self_ ^ contact.id;
-        table_[get_bucket_idx(id)].push(contact);
+void RoutingTable::remove(const Contact& c) {
+    int idx = get_bucket_idx(self_ ^ c.id);
+    for (auto it = table_[idx].bucket_.begin(); it != table_[idx].bucket_.end(); ++it) {
+        if (it->id == c.id) {
+            table_[idx].bucket_.erase(it);
+            break;
+        }
     }
 }
