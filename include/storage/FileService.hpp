@@ -12,7 +12,9 @@ public:
     FileService(Node& node);
 
     awaitable<Metadata> upload_file(const std::string file_path);
-    awaitable<bool> download_file(const Metadata& md, const std::string target_dir);
+    awaitable<Metadata> upload_file_multithreaded(const std::string file_path);
+    awaitable<bool> download_file(const Metadata&, const std::string target_dir);
+    awaitable<bool> download_file_multithreaded(const Metadata&, const std::string file_path);
 
 private:
     awaitable<std::optional<Key>> upload_chunk(std::ifstream& file, Metadata& md, int idx, int& pending);
