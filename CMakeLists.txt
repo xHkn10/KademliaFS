@@ -53,11 +53,32 @@ file(GLOB_RECURSE LIB_SOURCES
 
 # ---- Define Executables ----
 
-# 3. Tests
-add_executable(test_nodes src/test.cpp ${LIB_SOURCES})
+add_executable(spawn src/spawn_nodes.cpp ${LIB_SOURCES})
+add_executable(upload src/upload.cpp ${LIB_SOURCES})
+add_executable(download src/download.cpp ${LIB_SOURCES})
 
 # Link RocksDB and its mandatory compression dependencies
-target_link_libraries(test_nodes PRIVATE 
+target_link_libraries(spawn PRIVATE 
+    Boost::headers 
+    OpenSSL::Crypto
+    ${ROCKSDB_LIB}
+    ${BZ2_LIB}
+    ${Z_LIB}
+    ${LZ4_LIB}
+    ${ZSTD_LIB}
+    ${SNAPPY_LIB}
+)
+target_link_libraries(upload PRIVATE 
+    Boost::headers 
+    OpenSSL::Crypto
+    ${ROCKSDB_LIB}
+    ${BZ2_LIB}
+    ${Z_LIB}
+    ${LZ4_LIB}
+    ${ZSTD_LIB}
+    ${SNAPPY_LIB}
+)
+target_link_libraries(download PRIVATE 
     Boost::headers 
     OpenSSL::Crypto
     ${ROCKSDB_LIB}

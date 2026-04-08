@@ -15,12 +15,27 @@ Node::Node(Contact self, std::unique_ptr<TransportEngine> transport, std::string
 
 awaitable<std::optional<RpcMessage>>
 Node::call_rpc(Contact target, RpcMessage msg) {
-    auto res = co_await transport_->call_rpc(
-        std::move(target), std::move(msg)
-    );
-    if (!res)
+    auto ex = co_await net::this_coro::executor;
+
+    try {
+        auto result = co_await net::co_spawn(
+            ex,
+            transport_->call_rpc(std::move(target), std::move(msg)),
+            net::cancel_after(std::chrono::seconds(10), net::use_awaitable)
+        );
+        co_return result;
+    } catch (const std::system_error& e) {
+        LOG("Node::call_rpc" << e.what());
         table_.remove(target);
-    co_return res;
+        co_return std::nullopt;
+    }
+
+    // auto res = co_await transport_->call_rpc(
+    //     std::move(target), std::move(msg)
+    // );
+    // if (!res)
+    //     table_.remove(target);
+    // co_return res;
 }
 
 awaitable<void>
