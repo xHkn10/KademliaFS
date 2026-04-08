@@ -21,7 +21,7 @@ int main(void) {
 
     Contact boot_c{ID{}, 0x7F000001, 3169};
 
-    std::string file = "/Users/hakanakbiyik/Projects/Kademlia/testfiles/testfile10MB.bin";
+    std::string file = "testfiles/testfile10MB.bin";
     auto upload = [&]() -> awaitable<void> {
         FileService<TCPTransport> fs{boot_c, disk_pool.executor()};
         co_await fs.start(7001);

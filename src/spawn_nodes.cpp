@@ -11,6 +11,7 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include <atomic>
 
 namespace net = boost::asio;
 
@@ -35,24 +36,31 @@ int main() {
         auto& io = *ios[i % workers];
 
         auto transport = std::make_unique<TCPTransport>(c, io.get_executor());
-        nodes.emplace_back(std::move(c), std::move(transport), "/Users/hakanakbiyik/Projects/Kademlia/DB/db_"+std::to_string(port));
+        nodes.emplace_back(std::move(c), std::move(transport), "DB/db_" + std::to_string(port));
 
         net::co_spawn(io, nodes.back().listen(), net::detached);
     }
 
-    auto boot = [&nodes] -> awaitable<void> {
-        auto s = std::chrono::high_resolution_clock::now();
-        std::cout << "BOOTSTRAPPING..." << std::endl;
-        for (int i = 1; i < n; ++i)
-            co_await nodes[i].bootstrap({nodes.front().self_});
-        std::cout << "BOOTSTRAPPING DONE" << std::endl;
-        auto e = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(e - s).count();
-        std::cout << "Boot took " << duration << " seconds" << std::endl;
-    };
+    auto s = std::chrono::high_resolution_clock::now();
+    std::cout << "BOOTSTRAPPING..." << std::endl;
+    
+    auto boot_count = std::make_shared<std::atomic<int>>(0);
 
-    net::co_spawn(*ios[0], boot(), net::detached);
-
+    for (int i = 1; i < n; ++i) {
+        net::co_spawn(*ios[i % workers],
+            [&nodes, i, boot_count, s, n]() -> awaitable<void> {
+                co_await nodes[i].bootstrap({nodes.front().self_});
+                if (++(*boot_count) == n - 1) {
+                    std::cout << "BOOTSTRAPPING DONE" << std::endl;
+                    auto e = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::seconds>(e - s).count();
+                    std::cout << "Boot took " << duration << " seconds" << std::endl;
+                }
+            },
+            net::detached
+        );
+    }
+    
     std::vector<std::thread> threads;
     threads.reserve(workers);
     for (int i = 0; i < workers; ++i)
@@ -61,6 +69,7 @@ int main() {
                 io->run();
             }
         });
+
     for (auto& t : threads)
         t.join();
 }

@@ -14,7 +14,7 @@
 
 namespace net = boost::asio;
 
-bool files_equal(const std::string& a, const std::string& b) {
+static bool files_equal(const std::string& a, const std::string& b) {
     std::ifstream f1(a, std::ios::binary), f2(b, std::ios::binary);
     std::vector buf1((std::istreambuf_iterator<char>(f1)), {});
     std::vector buf2((std::istreambuf_iterator<char>(f2)), {});
@@ -29,8 +29,8 @@ int main(void) {
 
     Contact boot_c{ID{}, 0x7F000001, 3169};
 
-    std::string file = "/Users/hakanakbiyik/Projects/Kademlia/testfiles/testfile10MB.bin";
-    std::string target_loc = "/Users/hakanakbiyik/Projects/Kademlia/downloads/downloaded.bin";
+    std::string file = "testfiles/testfile10MB.bin";
+    std::string target_loc = "downloads/downloaded.bin";
 
     auto download = [&]() -> awaitable<void> {
         FileService<TCPTransport> fs{boot_c, disk_pool.executor()};

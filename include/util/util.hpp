@@ -43,8 +43,8 @@ inline std::ostream& operator<<(std::ostream& out, ID id) {
 
 namespace util {
     inline auto& get_gen() {
-        static std::random_device rd;
-        static std::mt19937 gen{rd()};
+        thread_local std::random_device rd;
+        thread_local std::mt19937 gen{rd()};
         return gen;
     }
 
