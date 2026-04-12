@@ -12,10 +12,14 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <filesystem>
 
 namespace net = boost::asio;
 
 int main() {
+    std::filesystem::path project_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+    std::filesystem::create_directories(project_root / "DB");
+
     const int n = 50;
     const int workers = std::thread::hardware_concurrency();
 
@@ -36,7 +40,7 @@ int main() {
         auto& io = *ios[i % workers];
 
         auto transport = std::make_unique<TCPTransport>(c, io.get_executor());
-        nodes.emplace_back(std::move(c), std::move(transport), "DB/db_" + std::to_string(port));
+        nodes.emplace_back(std::move(c), std::move(transport), (project_root / "DB" / ("db_" + std::to_string(port))).string());
 
         net::co_spawn(io, nodes.back().listen(), net::detached);
     }

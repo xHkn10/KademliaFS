@@ -31,7 +31,7 @@ ID ID::get_random_ID() {
     std::array<u8, 20> bytes;
 
     for (u8& byte : bytes)
-        byte = std::uniform_int_distribution<u8>{0, 255}(gen);
+        byte = std::uniform_int_distribution<unsigned int>{0, 255}(gen);
 
     return ID{bytes};
 }

@@ -12,6 +12,10 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if (WIN32)
+    add_compile_definitions(_WIN32_WINNT=0x0601)
+endif()
+
 # Sanitizers (Useful for RocksDB integration to catch memory leaks, mostly supported on Clang/GNU)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")

@@ -33,10 +33,13 @@ FileService<Transport>::start(const u16 port) {
     Contact c{ID::get_random_ID(), 0x7F000001, port};
     auto transport = std::make_unique<Transport>(c, ex);
     
+    fs::path project_root = fs::path(__FILE__).parent_path().parent_path().parent_path();
+    fs::create_directories(project_root / "DB");
+
     fs_node = std::make_unique<Node>(
         std::move(c), 
         std::move(transport), 
-        "/Users/hakanakbiyik/Projects/Kademlia/DB/db_"+std::to_string(port)
+        (project_root / "DB" / ("db_" + std::to_string(port))).string()
     );
     co_await fs_node->bootstrap({boot_c});
 }
