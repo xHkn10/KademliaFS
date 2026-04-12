@@ -6,3 +6,5 @@ DB
 downloads
 .DS_Store
 .vs
+CMakeSettings.json
+.idea
