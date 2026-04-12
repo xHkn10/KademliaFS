@@ -41,6 +41,8 @@ FileService<Transport>::start(const u16 port) {
         std::move(transport), 
         (project_root / "DB" / ("db_" + std::to_string(port))).string()
     );
+    
+    net::co_spawn(ex, fs_node->listen(), net::detached);
     co_await fs_node->bootstrap({boot_c});
 }
 
@@ -86,9 +88,12 @@ FileService<Transport>::download_file(
     if (fs::exists(file_path))
         std::cout << "File already exists btw (will be overridden)" << std::endl;    
 
-    {
+    try {
         std::ofstream out{file_path, std::ios::binary};
         fs::resize_file(file_path, md.sz);
+    } catch (const std::exception& e) {
+        LOG("FileService::download_file: Error opening file: " << e.what());
+        co_return false;
     }
 
     auto fd = util::file::open_write(file_path);
