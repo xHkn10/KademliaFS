@@ -77,6 +77,7 @@ file(GLOB_RECURSE LIB_SOURCES
     "src/rpc/*.cpp"
     "src/storage/*.cpp"
     "src/types/*.cpp"
+    "src/util/*.cpp"
 )
 
 # ---- Define Executables ----

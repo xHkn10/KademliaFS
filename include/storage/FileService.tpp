@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
-#include <sys/fcntl.h>
+#include "util/FileIO.hpp"
 #include <system_error>
 
 namespace fs = std::filesystem;
@@ -88,7 +88,7 @@ FileService<Transport>::download_file(
         fs::resize_file(file_path, md.sz);
     }
 
-    int fd = open(file_path.c_str(), O_WRONLY);
+    auto fd = util::file::open_write(file_path);
     if (fd == -1) {
         LOG("Couldn't open " << file_path);
         co_return false;
@@ -110,7 +110,7 @@ FileService<Transport>::download_file(
             }
             
             co_await net::post(disk_ex, use_awaitable);
-            pwrite(fd, data->data(), data->size(), idx * CHUNK_SZ);
+            util::file::pwrite(fd, data->data(), data->size(), idx * CHUNK_SZ);
             co_await net::post(node_ex, use_awaitable);
 
             if (nxt_idx % 10 == 0)
@@ -129,7 +129,7 @@ FileService<Transport>::download_file(
         net::experimental::wait_for_all(), use_awaitable
     );
 
-    close(fd);
+    util::file::close(fd);
     co_return true;
 }
 
@@ -145,7 +145,7 @@ FileService<Transport>::upload_file(const std::string file_path) {
         LOG(ec.message());
         throw std::runtime_error(ec.message());
     }
-    int fd = open(file_path.c_str(), O_RDONLY);
+    auto fd = util::file::open_read(file_path);
     if (fd == -1) {
         LOG("Couldn't open " << file_path);
         co_return md;
@@ -168,7 +168,7 @@ FileService<Transport>::upload_file(const std::string file_path) {
             Value data(CHUNK_SZ);
 
             co_await net::post(disk_ex, use_awaitable);
-            auto n = pread(fd, data.data(), CHUNK_SZ, idx * CHUNK_SZ);
+            auto n = util::file::pread(fd, data.data(), CHUNK_SZ, idx * CHUNK_SZ);
             data.resize(n);
             md.chunks[idx] = util::hash(data);
             co_await net::post(node_ex, use_awaitable);
@@ -191,6 +191,6 @@ FileService<Transport>::upload_file(const std::string file_path) {
         net::experimental::wait_for_all(), use_awaitable
     );
 
-    close(fd);
+    util::file::close(fd);
     co_return md;
 }
